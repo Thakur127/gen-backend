@@ -101,17 +101,20 @@ WSGI_APPLICATION = "gen.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("PG_NAME"),
-        "USER": env("PG_USER"),
-        "PASSWORD": env("PG_PASSWORD"),
-        "HOST": env("PG_HOST"),
-        "PORT": env("PG_PORT"),
-    }
-}
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": env("PG_NAME"),
+#         "USER": env("PG_USER"),
+#         "PASSWORD": env("PG_PASSWORD"),
+#         "HOST": env("PG_HOST"),
+#         "PORT": env("PG_PORT"),
+#     }
+# }
 
+DATABASES = {
+    "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -173,7 +176,7 @@ REST_AUTH = {
     "JWT_AUTH_COOKIE": "auth_access_token",
     "JWT_AUTH_REFRESH_COOKIE": "auth_refresh_token",
     "JWT_AUTH_REFRESH_COOKIE_PATH": "/",
-    "JWT_AUTH_HTTPONLY": True,
+    "JWT_AUTH_HTTPONLY": False,
     "JWT_AUTH_RETURN_EXPIRATION": True,
     "JWT_AUTH_SAMESITE": None,
 }
