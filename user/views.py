@@ -14,13 +14,12 @@ from dj_rest_auth.serializers import (
 )
 from dj_rest_auth.views import PasswordResetConfirmView, PasswordResetView
 from django.core.mail import send_mail
-from gen.settings import FRONTEND_DOMAIN
 from django.conf import settings
 from .serializers import CustomUserDetailsSerializer
 
 
 User = get_user_model()
-
+FRONTEND_DOMAIN = settings.FRONTEND_DOMAIN
 
 
 class CustomPasswordResetView(PasswordResetView):
