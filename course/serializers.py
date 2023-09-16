@@ -49,6 +49,12 @@ class EnrollSerializer(serializers.ModelSerializer):
     #     return data
 
 
+class EnrollmentNumberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Enroll
+        fields = ("enrollment_no", "enrolled_at")
+
+
 class DiscussionSerializer(serializers.ModelSerializer):
     student = CustomUserDetailsSerializer(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)

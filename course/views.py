@@ -27,6 +27,8 @@ from .models import Course, Lecture, Enroll, Discussion, Review
 from user.models import CustomUser as User
 from rest_framework.pagination import CursorPagination
 
+from .utils import user_enrollment
+
 
 class MyCursorPagination(CursorPagination):
     page_size = 4
@@ -60,6 +62,17 @@ class CourseDetailView(RetrieveUpdateDestroyAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
     permission_classes = [IsOwnerOrReadOnly]
+
+    def retrieve(self, request, *args, **kwargs):
+        course = self.get_object()
+        serializer = self.get_serializer(course)
+        enrollment = None
+        if request.user.is_authenticated:
+            enrollment = user_enrollment(request.user, course)
+        return Response(
+            {"course": serializer.data, "enrollment": enrollment},
+            status=status.HTTP_200_OK,
+        )
 
 
 class UserCourseListView(ListAPIView):
