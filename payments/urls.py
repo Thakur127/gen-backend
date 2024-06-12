@@ -10,6 +10,11 @@ urlpatterns = [
     ),
     path("webhook/", views.WebhookView.as_view(), name="webhook"),
     path(
+        "checkout/session/<str:session_id>/line-items/",
+        views.CheckoutSessionInfo.as_view(),
+        name="checkout-session",
+    ),
+    path(
         "available-currencies/", views.Currency.as_view(), name="available_currencies"
     ),
     path("transactions/", views.PaymentsView.as_view(), name="user-payments"),

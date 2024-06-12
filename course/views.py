@@ -1,3 +1,4 @@
+from django.db.models import Count
 from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
@@ -37,22 +38,24 @@ class MyCursorPagination(CursorPagination):
 
 class CourseListView(ListCreateAPIView):
     serializer_class = CourseSerializer
-    queryset = Course.objects.all()
+    queryset = Course.objects.distinct("id")  # Ensure distinct courses
     permission_classes = [IsTeacherOrReadOnly]
     pagination_class = MyCursorPagination
 
     def get_queryset(self):
-        # filter course acc. to category
+        queryset = super().get_queryset()
+
+        # filter course according to category
         category = self.request.query_params.get("category")
         if category:
-            return Course.objects.filter(category__icontains=category)
+            queryset = queryset.filter(category__icontains=category)
 
         # search course title
         q = self.request.query_params.get("q")
         if q:
-            return Course.objects.filter(title__icontains=q)
+            queryset = queryset.filter(title__icontains=q)
 
-        return super().get_queryset()
+        return queryset.annotate(enrollments_count=Count("enrollments")).distinct()
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)

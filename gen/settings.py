@@ -59,7 +59,7 @@ INSTALLED_APPS = [
     "dj_rest_auth.registration",
     # TO HANDLE CROSS SITE ORIGIN REQUEST
     "corsheaders",
-    # To handle payments
+    # TO HANDLE PAYMENTS
     "payments",
 ]
 
@@ -101,23 +101,23 @@ WSGI_APPLICATION = "gen.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("PG_NAME"),
-        "USER": env("PG_USER"),
-        "PASSWORD": env("PG_PASSWORD"),
-        "HOST": env("PG_HOST"),
-        "PORT": env("PG_PORT"),
-    }
-}
-
 # DATABASES = {
 #     "default": {
-#         "ENGINE": "django.db.backends.sqlite3",
-#         "NAME": BASE_DIR / "db.sqlite3",
-#     },
+#         "ENGINE": "django.db.backends.postgresql",
+#         "NAME": env("PG_NAME"),
+#         "USER": env("PG_USER"),
+#         "PASSWORD": env("PG_PASSWORD"),
+#         "HOST": env("PG_HOST"),
+#         "PORT": env("PG_PORT"),
+#     }
 # }
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    },
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -162,8 +162,10 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles_build", "static")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+#######################################################################################################################
+################################################# CUSTOM INTEGRATIONS #################################################
+#######################################################################################################################
 
-# CUSTOM INTEGRATIONS #################################################
 # APPEND_SLASH = True
 AUTH_USER_MODEL = "user.CustomUser"
 
@@ -215,7 +217,7 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=21),
 }
 
@@ -229,6 +231,7 @@ AUTHENTICATION_BACKENDS = [
     # allauth specific authentication methods, such as login by e-mail
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
+
 
 # Payments
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY")

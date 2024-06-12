@@ -72,6 +72,9 @@ class Course(models.Model):
 
 class Lecture(models.Model):
     title = models.CharField(max_length=64, verbose_name="Lecture Title")
+    description = models.CharField(
+        max_length=256, blank=True, verbose_name="Lecture Description"
+    )
     lecture_url = models.URLField(verbose_name="Lecture Url")
     thumbnail = models.URLField(blank=True, verbose_name="Cover Image")
     duration = models.DurationField(default=timedelta(hours=0, minutes=0, seconds=0))

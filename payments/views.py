@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
+import stripe.error
 from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -8,6 +9,7 @@ from rest_framework.response import Response
 from django.conf import settings
 from rest_framework import status
 import stripe
+import logging
 
 from course.models import Course
 from course.models import Enroll
@@ -18,6 +20,8 @@ from .serializers import PaymentSerializer
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 
 class Currency(APIView):
@@ -53,23 +57,12 @@ class CreateCheckoutSession(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        domain_url = (
-            settings.FRONTEND_DOMAIN
-            if settings.FRONTEND_DOMAIN
-            else "http://localhost:5173"
-        )
+        domain_url = settings.FRONTEND_DOMAIN or "http://localhost:5173"
+
         info_query = f"course_name={course.title}&course_id={course.pk}&amount={course.price}&currency={course.currency}"
 
         try:
             checkout_session = stripe.checkout.Session.create(
-                success_url=domain_url
-                + "/payment/completed?status=success&session_id={CHECKOUT_SESSION_ID}"
-                + "&"
-                + info_query,
-                cancel_url=domain_url
-                + "/payment/completed?status=failed"
-                + "&"
-                + info_query,
                 payment_method_types=["card"],
                 mode="payment",
                 line_items=[
@@ -87,6 +80,8 @@ class CreateCheckoutSession(APIView):
                     }
                 ],
                 metadata={"course_id": course.pk, "user_id": request.user.pk},
+                success_url=domain_url + "/payment/success/{CHECKOUT_SESSION_ID}/"+str(course_id)+"/",
+                cancel_url=domain_url + "/payment/failed/"+str(course_id)+"/",
             )
         except Exception as e:
             return Response(data={"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -102,87 +97,123 @@ class CreateCheckoutSession(APIView):
 
 class WebhookView(APIView):
     def post(self, request, format=None):
+
         payload = request.body
-        sig_header = request.META["HTTP_STRIPE_SIGNATURE"]
+        sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
         stripe_webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+
+        if sig_header is None:
+            logger.error("Missing Stripe signature header")
+            return Response(
+                {"error": "Missing Stripe signature header"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             event = stripe.Webhook.construct_event(
                 payload, sig_header, stripe_webhook_secret
             )
         except ValueError as e:
-            print(e)
+            logger.error(f"Invalid payload: {e}")
             return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": "Invalid payload"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         except stripe.error.SignatureVerificationError as e:
-            print(e)
+            logger.error(f"Signature verification error: {e}")
             return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": "Signature verification error"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if event.type == "payment_intent.payment_failed":
+        # Log the received event
+        logger.info(f"Received event: {event['type']}")
+
+        # Handle different event types
+        event_type = event["type"]
+
+        if event_type == "payment_intent.payment_failed":
             payment_intent = event.data.object
-
-            # Extract necessary information from the payment_intent object
-            transaction_id = payment_intent.id
-            session_id = payment_intent.metadata.get("session_id")
-            amount = payment_intent.amount / 100  # Convert from cents to currency
-            currency = payment_intent.currency
-            course_id = payment_intent.metadata.get("course_id")
-            user_id = payment_intent.metadata.get("user_id")
-
-            user = User.objects.filter(pk=user_id).first()
-            course = Course.objects.filter(pk=course_id).first()
-
-            if course and user:
-                Payment.objects.create(
-                    transaction_id=transaction_id,
-                    session_id=session_id,
-                    amount=amount,
-                    currency=currency,
-                    status="failed",  # Set the status to "failed" for payment failed event
-                    course=course,
-                    user=user,
-                )
-
-        if event.type == "checkout.session.completed":
+            handle_payment_failed(payment_intent)
+        elif event_type == "checkout.session.completed":
             session = event.data.object
-            print(session)
+            handle_checkout_session_completed(session)
+        else:
+            logger.warning(f"Unhandled event type: {event_type}")
 
-            transaction_id = session.get("payment_intent")
-            session_id = session.get("id")
-            currency = session.get("currency").upper()
-            amount = session.get("amount_total") / 100
-            payment_status = session.get("payment_status")
-            course_id = session.metadata.get("course_id")
-            user_id = session.metadata.get("user_id")
+        return Response(status=status.HTTP_200_OK)
 
-            if course_id and user_id:
-                course = Course.objects.filter(pk=course_id).first()
-                user = User.objects.filter(pk=user_id).first()
 
-                if course and user:
-                    new_enrollment = Enroll.objects.create(
-                        student=user,
-                        course=course,
-                    )
-                    Payment.objects.create(
-                        transaction_id=transaction_id,
-                        session_id=session_id,
-                        currency=currency,
-                        amount=amount,
-                        payment_status=payment_status,
-                        enrollment=new_enrollment,
-                        user=user,
-                        course=course,
-                    )
+def handle_payment_failed(payment_intent):
+    transaction_id = payment_intent.id
+    session_id = payment_intent.metadata.get("session_id")
+    amount = payment_intent.amount / 100  # Convert from cents to currency
+    currency = payment_intent.currency
+    course_id = payment_intent.metadata.get("course_id")
+    user_id = payment_intent.metadata.get("user_id")
 
-                return Response(
-                    {"detail": "Enrollment Successful."}, status=status.HTTP_201_CREATED
-                )
+    user = User.objects.filter(pk=user_id).first()
+    course = Course.objects.filter(pk=course_id).first()
 
-        return Response(status=status.HTTP_400_BAD_REQUEST)
+    if course and user:
+        Payment.objects.create(
+            transaction_id=transaction_id,
+            session_id=session_id,
+            amount=amount,
+            currency=currency,
+            status="failed",
+            course=course,
+            user=user,
+        )
+    else:
+        logger.error("Failed to create payment record: Course or user not found")
+
+
+def handle_checkout_session_completed(session):
+    transaction_id = session.get("payment_intent")
+    session_id = session.get("id")
+    currency = session.get("currency").upper()
+    amount = session.get("amount_total") / 100
+    payment_status = session.get("payment_status")
+    course_id = session.metadata.get("course_id")
+    user_id = session.metadata.get("user_id")
+
+    if course_id and user_id:
+        course = Course.objects.filter(pk=course_id).first()
+        user = User.objects.filter(pk=user_id).first()
+
+        if course and user:
+            new_enrollment = Enroll.objects.create(
+                student=user,
+                course=course,
+            )
+            Payment.objects.create(
+                transaction_id=transaction_id,
+                session_id=session_id,
+                currency=currency,
+                amount=amount,
+                payment_status=payment_status,
+                enrollment=new_enrollment,
+                user=user,
+                course=course,
+            )
+        else:
+            logger.error(
+                "Failed to create enrollment or payment record: Course or user not found"
+            )
+    else:
+        logger.error("Course ID or User ID missing from session metadata")
+
+
+class CheckoutSessionInfo(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, session_id, format=None):
+        try:
+            session = stripe.checkout.Session.list_line_items(session_id)
+            return Response(data=session, status=status.HTTP_200_OK)
+        except stripe.error.StripeError as e:
+            return Response(data={"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PaymentsView(ListAPIView):
