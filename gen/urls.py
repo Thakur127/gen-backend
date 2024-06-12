@@ -15,5 +15,4 @@ urlpatterns = [
     path("api/", include("course.urls")),
     # Payments
     path("api/payments/", include("payments.urls")),
-]
-# + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
